@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -48,7 +48,6 @@ type config struct {
 }
 
 func (commands Commands) Exec() []error {
-	fmt.Printf("EXEC=%+v\n", commands)
 	errs := make([]error, 0)
 	for _, cmd := range commands {
 		if err := cmd.Exec(); err != nil {
@@ -143,7 +142,7 @@ func main() {
 
 	usb := gousb.NewContext()
 
-	cfgdata, err := ioutil.ReadFile(os.Args[1])
+	cfgdata, err := io.ReadFile(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
@@ -219,7 +218,7 @@ func main() {
 		}
 	}()
 
-	files, err := ioutil.ReadDir("/proc")
+	files, err := os.ReadDir("/proc")
 	if err != nil {
 		log.Fatal(err)
 	}
