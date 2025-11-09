@@ -53,27 +53,21 @@ func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 			return
 		}
 
-		fmt.Printf("%+v\n", desc)
 		for _, cfg := range usbCfgs {
 			if desc.Vendor == gousb.ID(cfg.Vendor) && desc.Product == gousb.ID(cfg.Product) {
 				if ev.Type() == gousb.HotplugEventDeviceArrived {
-					fmt.Printf("UP=%+v\n", cfg.CmdUp)
 					if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
 						for _, err := range errs {
-							fmt.Printf("ERROR: %s", err)
+							log.Printf("ERROR: %s", err)
 						}
 					}
 				} else if ev.Type() == gousb.HotplugEventDeviceLeft {
-					fmt.Printf("DOWN=%+v\n", cfg.CmdDown)
 					if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
 						for _, err := range errs {
-							fmt.Printf("ERROR: %s", err)
+							log.Printf("ERROR: %s", err)
 						}
 					}
 				}
-			} else {
-				fmt.Printf("%v != %v\n", desc.Vendor, gousb.ID(cfg.Vendor))
-				fmt.Printf("%v != %v\n", desc.Product, gousb.ID(cfg.Product))
 			}
 		}
 	})
