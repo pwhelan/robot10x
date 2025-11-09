@@ -1,4 +1,4 @@
-package main
+package watcher
 
 import (
 	"context"
@@ -15,16 +15,16 @@ type USBWatcher struct {
 	usb *gousb.Context
 }
 
-type ID gousb.ID
+type Id gousb.ID
 
-type usbhotplugconfig struct {
-	Product ID       `json:"product"`
-	Vendor  ID       `json:"vendor"`
+type USBHotplugConfig struct {
+	Product Id       `json:"product"`
+	Vendor  Id       `json:"vendor"`
 	CmdUp   Commands `json:"up"`
 	CmdDown Commands `json:"down"`
 }
 
-func (id *ID) UnmarshalJSON(data []byte) error {
+func (id *Id) UnmarshalJSON(data []byte) error {
 	var num string
 	if err := json.Unmarshal(data, &num); err != nil {
 		return err
@@ -33,13 +33,13 @@ func (id *ID) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	*id = ID(val)
+	*id = Id(val)
 	return nil
 }
 
 // Init initializes the USB watcher.
 func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
-	usbCfgs, ok := cfg.([]usbhotplugconfig)
+	usbCfgs, ok := cfg.([]USBHotplugConfig)
 	if !ok {
 		return fmt.Errorf("invalid config type for USBWatcher")
 	}
@@ -71,8 +71,8 @@ func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 					}
 				}
 			} else {
-				fmt.Printf("%v != %v\n", desc.Vendor, cfg.Vendor)
-				fmt.Printf("%v != %v\n", desc.Product, cfg.Product)
+				fmt.Printf("%v != %v\n", desc.Vendor, gousb.ID(cfg.Vendor))
+				fmt.Printf("%v != %v\n", desc.Product, gousb.ID(cfg.Product))
 			}
 		}
 	})

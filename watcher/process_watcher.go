@@ -1,4 +1,4 @@
-package main
+package watcher
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 // ProcessWatcher implements the Watcher interface for process events.
 type ProcessWatcher struct{}
 
-type execconfig struct {
+type ExecConfig struct {
 	Binary  string   `json:"bin"`
 	CmdUp   Commands `json:"up"`
 	CmdDown Commands `json:"down"`
@@ -26,13 +26,13 @@ func isNumeric(s string) bool {
 
 // Init initializes the process watcher.
 func (w *ProcessWatcher) Init(ctx context.Context, cfg any) error {
-	execCfgs, ok := cfg.([]execconfig)
+	execCfgs, ok := cfg.([]ExecConfig)
 	if !ok {
 		return fmt.Errorf("invalid config type for ProcessWatcher")
 	}
 
-	execs := make(map[string]execconfig)
-	execd := make(map[int]execconfig)
+	execs := make(map[string]ExecConfig)
+	execd := make(map[int]ExecConfig)
 
 	pswatcher, err := psnotify.NewWatcher()
 	if err != nil {
