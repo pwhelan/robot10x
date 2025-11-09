@@ -1,21 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
-	"strconv"
+	"os/signal"
 	"strings"
-	"time"
-
-	"github.com/elastic/gosigar/psnotify"
-	"github.com/pwhelan/gousb"
+	"syscall"
 )
-
-type ID gousb.ID
 
 type Command struct {
 	Command string
@@ -28,19 +23,6 @@ func (command Command) Exec() error {
 }
 
 type Commands []Command
-
-type execconfig struct {
-	Binary  string   `json:"bin"`
-	CmdUp   Commands `json:"up"`
-	CmdDown Commands `json:"down"`
-}
-
-type usbhotplugconfig struct {
-	Product ID       `json:"product"`
-	Vendor  ID       `json:"vendor"`
-	CmdUp   Commands `json:"up"`
-	CmdDown Commands `json:"down"`
-}
 
 type config struct {
 	USB  []usbhotplugconfig `json:"usb"`
@@ -117,125 +99,46 @@ func (commands *Commands) UnmarshalJSON(buf []byte) error {
 	}
 }
 
-func (id *ID) UnmarshalJSON(data []byte) error {
-	var num string
-	if err := json.Unmarshal(data, &num); err != nil {
-		return err
-	}
-	val, err := strconv.ParseUint(num[2:], 16, 32)
-	if err != nil {
-		return err
-	}
-	*id = ID(val)
-	return nil
-}
-
-func isNumeric(s string) bool {
-	_, err := strconv.ParseInt(s, 10, 64)
-	return err == nil
-}
-
 func main() {
+	if len(os.Args) < 2 {
+		log.Fatal("Usage: ", os.Args[0], " <config.json>")
+	}
+
+	cfgdata, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		log.Fatal("Failed to read config file: ", err)
+	}
+
 	var cfg config
-	execs := make(map[string]execconfig)
-	execd := make(map[int]execconfig)
-
-	usb := gousb.NewContext()
-
-	cfgdata, err := io.ReadFile(os.Args[1])
-	if err != nil {
-		panic(err)
-	}
 	if err := json.Unmarshal(cfgdata, &cfg); err != nil {
-		panic(err)
+		log.Fatal("Failed to parse config: ", err)
 	}
 
-	usb.RegisterHotplug(func(ev gousb.HotplugEvent) {
-		desc, err := ev.DeviceDesc()
-		if err != nil {
-			panic(err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	watchers := []Watcher{
+		&USBWatcher{},
+		&ProcessWatcher{},
+	}
+
+	if len(cfg.USB) > 0 {
+		if err := watchers[0].Init(ctx, cfg.USB); err != nil {
+			log.Fatalf("Failed to initialize USB watcher: %v", err)
 		}
-
-		fmt.Printf("%+v\n", desc)
-		for _, cfg := range cfg.USB {
-			if desc.Vendor == gousb.ID(cfg.Vendor) && desc.Product == gousb.ID(cfg.Product) {
-				if ev.Type() == gousb.HotplugEventDeviceArrived {
-					fmt.Printf("UP=%+v\n", cfg.CmdUp)
-					if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
-						for _, err := range errs {
-							fmt.Printf("ERROR: %s", err)
-						}
-					}
-				} else if ev.Type() == gousb.HotplugEventDeviceLeft {
-					fmt.Printf("DOWN=%+v\n", cfg.CmdDown)
-					if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
-						for _, err := range errs {
-							fmt.Printf("ERROR: %s", err)
-						}
-					}
-				}
-			} else {
-				fmt.Printf("%v != %v\n", desc.Vendor, cfg.Vendor)
-				fmt.Printf("%v != %v\n", desc.Product, cfg.Product)
-			}
-		}
-	})
-
-	pswatcher, err := psnotify.NewWatcher()
-	if err != nil {
-		log.Fatal(err)
 	}
-
-	for _, exec := range cfg.Exec {
-		execs[exec.Binary] = exec
-	}
-
-	go func() {
-		for {
-			select {
-			case ev := <-pswatcher.Exec:
-				bin, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", ev.Pid))
-				if ex, ok := execs[bin]; ok {
-					log.Printf("exec event: %d->%s", ev.Pid, bin)
-					if errs := ex.CmdUp.Exec(); len(errs) > 0 {
-						for _, err := range errs {
-							fmt.Printf("ERROR: %s", err)
-						}
-					}
-					execd[ev.Pid] = ex
-				}
-			case ev := <-pswatcher.Exit:
-				if ex, ok := execd[ev.Pid]; ok {
-					log.Printf("exit event: %d->%s (%+v)", ev.Pid, ex.Binary, ev)
-					if errs := ex.CmdDown.Exec(); len(errs) > 0 {
-						for _, err := range errs {
-							fmt.Printf("ERROR: %s", err)
-						}
-					}
-					delete(execd, ev.Pid)
-				}
-			}
-		}
-	}()
-
-	files, err := os.ReadDir("/proc")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, f := range files {
-		if f.IsDir() && isNumeric(f.Name()) {
-			pid, _ := strconv.ParseInt(f.Name(), 10, 64)
-			err = pswatcher.Watch(int(pid), psnotify.PROC_EVENT_EXIT|psnotify.PROC_EVENT_EXEC)
-			if err != nil {
-				log.Fatal(err)
-			}
+	if len(cfg.Exec) > 0 {
+		if err := watchers[1].Init(ctx, cfg.Exec); err != nil {
+			log.Fatalf("Failed to initialize Process watcher: %v", err)
 		}
 	}
 
-	defer pswatcher.Close()
+	log.Println("Watchers initialized. Waiting for events...")
 
-	for {
-		time.Sleep(time.Second * 30)
-	}
+	// Wait for termination signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	log.Println("Shutting down...")
 }
