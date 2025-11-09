@@ -7,16 +7,15 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/pwhelan/gousb"
 	"github.com/pwhelan/robot10x/command"
+	usbmon "github.com/rubiojr/go-usbmon"
 )
 
 // USBWatcher implements the Watcher interface for USB hotplug events.
 type USBWatcher struct {
-	usb *gousb.Context
 }
 
-type Id gousb.ID
+type Id uint64
 
 type USBHotplugConfig struct {
 	Product Id               `json:"product"`
@@ -38,6 +37,19 @@ func (id *Id) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (id Id) Equals(sid string) bool {
+	if sid[0:2] == "0x" {
+		sid = sid[2:]
+	}
+
+	val, err := strconv.ParseUint(sid, 16, 32)
+	if err != nil {
+		return false
+	}
+
+	return id == Id(val)
+}
+
 // Init initializes the USB watcher.
 func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 	usbCfgs, ok := cfg.([]USBHotplugConfig)
@@ -45,36 +57,37 @@ func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 		return fmt.Errorf("invalid config type for USBWatcher")
 	}
 
-	w.usb = gousb.NewContext()
-	w.usb.RegisterHotplug(func(ev gousb.HotplugEvent) {
-		desc, err := ev.DeviceDesc()
+	go func() {
+		cusbmon, err := usbmon.Listen(ctx)
 		if err != nil {
-			log.Printf("could not get device description: %v", err)
-			return
+			log.Fatal(err)
 		}
 
-		for _, cfg := range usbCfgs {
-			if desc.Vendor == gousb.ID(cfg.Vendor) && desc.Product == gousb.ID(cfg.Product) {
-				if ev.Type() == gousb.HotplugEventDeviceArrived {
-					if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
-						for _, err := range errs {
-							log.Printf("ERROR: %s", err)
-						}
-					}
-				} else if ev.Type() == gousb.HotplugEventDeviceLeft {
-					if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
-						for _, err := range errs {
-							log.Printf("ERROR: %s", err)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case device := <-cusbmon:
+				for _, cfg := range usbCfgs {
+					if cfg.Vendor.Equals(device.VendorID()) && cfg.Product.Equals(device.ProductID()) {
+						switch device.Action() {
+						case "add":
+							if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
+								for _, err := range errs {
+									log.Printf("ERROR: %s", err)
+								}
+							}
+						case "remove":
+							if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
+								for _, err := range errs {
+									log.Printf("ERROR: %s", err)
+								}
+							}
 						}
 					}
 				}
 			}
 		}
-	})
-
-	go func() {
-		<-ctx.Done()
-		w.usb.Close()
 	}()
 
 	return nil
