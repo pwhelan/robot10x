@@ -1,4 +1,4 @@
-module github.com/pwhelan/switcharoo
+module github.com/pwhelan/robot10x
 
 go 1.18
 
