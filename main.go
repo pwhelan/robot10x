@@ -3,33 +3,46 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
+	"github.com/goccy/go-yaml"
 	"github.com/pwhelan/robot10x/watcher"
 )
 
 type config struct {
-	USB  []watcher.USBHotplugConfig `json:"usb"`
-	Exec []watcher.ExecConfig       `json:"commands"`
+	USB  []watcher.USBHotplugConfig `json:"usb" yaml:"usb"`
+	Exec []watcher.ExecConfig       `json:"commands" yaml:"commands"`
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: ", os.Args[0], " <config.json>")
+		log.Fatal("Usage: ", os.Args[0], " <config.json|config.yaml>")
 	}
 
-	cfgdata, err := os.ReadFile(os.Args[1])
+	cfgFile := os.Args[1]
+	cfgdata, err := os.ReadFile(cfgFile)
 	if err != nil {
 		log.Fatal("Failed to read config file: ", err)
 	}
 
 	var cfg config
-	if err := json.Unmarshal(cfgdata, &cfg); err != nil {
-		log.Fatal("Failed to parse config: ", err)
+	ext := filepath.Ext(cfgFile)
+	switch ext {
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(cfgdata, &cfg); err != nil {
+			log.Fatal("Failed to parse YAML config: ", err)
+		}
+	default:
+		if err := json.Unmarshal(cfgdata, &cfg); err != nil {
+			log.Fatal("Failed to parse JSON config: ", err)
+		}
 	}
+	fmt.Printf("cfg=%+v\n", cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

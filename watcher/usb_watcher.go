@@ -24,17 +24,29 @@ type USBHotplugConfig struct {
 	CmdDown command.Commands `json:"down"`
 }
 
-func (id *Id) UnmarshalJSON(data []byte) error {
-	var num string
-	if err := json.Unmarshal(data, &num); err != nil {
-		return err
+func (id *Id) UnmarshalText(data []byte) error {
+	num := string(data)
+	if len(num) > 2 && num[0:2] == "0x" {
+		num = num[2:]
 	}
-	val, err := strconv.ParseUint(num[2:], 16, 32)
+	val, err := strconv.ParseUint(num, 16, 32)
 	if err != nil {
 		return err
 	}
 	*id = Id(val)
 	return nil
+}
+
+func (id *Id) UnmarshalJSON(data []byte) error {
+	var num string
+	if err := json.Unmarshal(data, &num); err != nil {
+		return err
+	}
+	return id.UnmarshalText([]byte(num))
+}
+
+func (id *Id) UnmarshalYAML(data []byte) error {
+	return id.UnmarshalText(data[:len(data)-1])
 }
 
 func (id Id) Equals(sid string) bool {

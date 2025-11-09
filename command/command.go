@@ -8,8 +8,8 @@ import (
 )
 
 type Command struct {
-	Command string
-	Args    []string
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 func (command Command) Exec() error {
@@ -29,13 +29,7 @@ func (commands Commands) Exec() []error {
 	return errs
 }
 
-func (commands *Commands) UnmarshalJSON(buf []byte) error {
-	var data interface{}
-
-	if err := json.Unmarshal(buf, &data); err != nil {
-		return err
-	}
-
+func (commands *Commands) unmarshal(data interface{}) error {
 	switch cmds := data.(type) {
 	case string:
 		cmdparts := strings.Split(cmds, " ")
@@ -87,4 +81,20 @@ func (commands *Commands) UnmarshalJSON(buf []byte) error {
 	default:
 		return fmt.Errorf("unable to unmarshal command format: %+v", data)
 	}
+}
+
+func (commands *Commands) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var data interface{}
+	if err := unmarshal(&data); err != nil {
+		return err
+	}
+	return commands.unmarshal(data)
+}
+
+func (commands *Commands) UnmarshalJSON(buf []byte) error {
+	var data interface{}
+	if err := json.Unmarshal(buf, &data); err != nil {
+		return err
+	}
+	return commands.unmarshal(data)
 }

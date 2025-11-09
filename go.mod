@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/elastic/gosigar v0.14.2
+	github.com/goccy/go-yaml v1.18.0
 	github.com/rubiojr/go-usbmon v1.0.0
 )
 
