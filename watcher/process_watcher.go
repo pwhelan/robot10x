@@ -8,15 +8,16 @@ import (
 	"strconv"
 
 	"github.com/elastic/gosigar/psnotify"
+	"github.com/pwhelan/robot10x/command"
 )
 
 // ProcessWatcher implements the Watcher interface for process events.
 type ProcessWatcher struct{}
 
 type ExecConfig struct {
-	Binary  string   `json:"bin"`
-	CmdUp   Commands `json:"up"`
-	CmdDown Commands `json:"down"`
+	Binary  string           `json:"bin"`
+	CmdUp   command.Commands `json:"up"`
+	CmdDown command.Commands `json:"down"`
 }
 
 func isNumeric(s string) bool {

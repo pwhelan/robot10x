@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/pwhelan/gousb"
+	"github.com/pwhelan/robot10x/command"
 )
 
 // USBWatcher implements the Watcher interface for USB hotplug events.
@@ -18,10 +19,10 @@ type USBWatcher struct {
 type Id gousb.ID
 
 type USBHotplugConfig struct {
-	Product Id       `json:"product"`
-	Vendor  Id       `json:"vendor"`
-	CmdUp   Commands `json:"up"`
-	CmdDown Commands `json:"down"`
+	Product Id               `json:"product"`
+	Vendor  Id               `json:"vendor"`
+	CmdUp   command.Commands `json:"up"`
+	CmdDown command.Commands `json:"down"`
 }
 
 func (id *Id) UnmarshalJSON(data []byte) error {

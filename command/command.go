@@ -1,4 +1,4 @@
-package watcher
+package command
 
 import (
 	"encoding/json"
