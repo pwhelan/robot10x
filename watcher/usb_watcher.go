@@ -25,6 +25,30 @@ type USBHotplugConfig struct {
 	CmdDown command.Commands `json:"down"`
 }
 
+func (cfg USBHotplugConfig) Matches(device *usbmon.Device) bool {
+	return cfg.Vendor.Equals(device.VendorID()) &&
+		cfg.Product.Equals(device.ProductID())
+}
+
+func (cfg USBHotplugConfig) ExecuteAction(logger *log.Logger, device *usbmon.Device) {
+	if cfg.Matches(device) {
+		switch device.Action() {
+		case "add":
+			if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
+				for _, err := range errs {
+					logger.Error("ERROR: %s", err)
+				}
+			}
+		case "remove":
+			if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
+				for _, err := range errs {
+					logger.Error("ERROR: %s", err)
+				}
+			}
+		}
+	}
+}
+
 func (id *Id) UnmarshalText(data []byte) error {
 	num := string(data)
 	if len(num) > 2 && num[0:2] == "0x" {
@@ -87,22 +111,7 @@ func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 				return
 			case device := <-cusbmon:
 				for _, cfg := range usbCfgs {
-					if cfg.Vendor.Equals(device.VendorID()) && cfg.Product.Equals(device.ProductID()) {
-						switch device.Action() {
-						case "add":
-							if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
-								for _, err := range errs {
-									logger.Error("ERROR: %s", err)
-								}
-							}
-						case "remove":
-							if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
-								for _, err := range errs {
-									logger.Error("ERROR: %s", err)
-								}
-							}
-						}
-					}
+					cfg.ExecuteAction(logger, device)
 				}
 			}
 		}
