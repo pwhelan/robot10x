@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
-	"github.com/goccy/go-yaml"
 	"github.com/pwhelan/robot10x/watcher"
+
+	"github.com/charmbracelet/log"
+	"github.com/goccy/go-yaml"
 )
 
 type config struct {
@@ -20,14 +20,16 @@ type config struct {
 }
 
 func main() {
+	logger := log.New(os.Stderr)
+
 	if len(os.Args) < 2 {
-		log.Fatal("Usage: ", os.Args[0], " <config.json|config.yaml>")
+		logger.Fatal("Usage: ", os.Args[0], " <config.json|config.yaml>")
 	}
 
 	cfgFile := os.Args[1]
 	cfgdata, err := os.ReadFile(cfgFile)
 	if err != nil {
-		log.Fatal("Failed to read config file: ", err)
+		logger.Fatal("Failed to read config file: ", err)
 	}
 
 	var cfg config
@@ -35,14 +37,13 @@ func main() {
 	switch ext {
 	case ".yaml", ".yml":
 		if err := yaml.Unmarshal(cfgdata, &cfg); err != nil {
-			log.Fatal("Failed to parse YAML config: ", err)
+			logger.Fatal("Failed to parse YAML config: ", err)
 		}
 	default:
 		if err := json.Unmarshal(cfgdata, &cfg); err != nil {
-			log.Fatal("Failed to parse JSON config: ", err)
+			logger.Fatal("Failed to parse JSON config: ", err)
 		}
 	}
-	fmt.Printf("cfg=%+v\n", cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -52,24 +53,26 @@ func main() {
 		&watcher.ProcessWatcher{},
 	}
 
+	wctx := context.WithValue(ctx, "logger", logger)
+
 	if len(cfg.USB) > 0 {
-		if err := watchers[0].Init(ctx, cfg.USB); err != nil {
-			log.Fatalf("Failed to initialize USB watcher: %v", err)
+		if err := watchers[0].Init(wctx, cfg.USB); err != nil {
+			logger.Fatalf("Failed to initialize USB watcher: %v", err)
 		}
 	}
 
 	if len(cfg.Exec) > 0 {
-		if err := watchers[1].Init(ctx, cfg.Exec); err != nil {
-			log.Fatalf("Failed to initialize Process watcher: %v", err)
+		if err := watchers[1].Init(wctx, cfg.Exec); err != nil {
+			logger.Fatalf("Failed to initialize Process watcher: %v", err)
 		}
 	}
 
-	log.Println("Watchers initialized. Waiting for events...")
+	logger.Info("Watchers initialized. Waiting for events...")
 
 	// Wait for termination signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("Shutting down...")
+	logger.Info("Shutting down...")
 }
