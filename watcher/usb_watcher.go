@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 
 	"github.com/pwhelan/robot10x/command"
+
+	"github.com/charmbracelet/log"
 	usbmon "github.com/rubiojr/go-usbmon"
 )
 
@@ -64,6 +65,11 @@ func (id Id) Equals(sid string) bool {
 
 // Init initializes the USB watcher.
 func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
+	logger, ok := ctx.Value("logger").(*log.Logger)
+	if !ok {
+
+	}
+
 	usbCfgs, ok := cfg.([]USBHotplugConfig)
 	if !ok {
 		return fmt.Errorf("invalid config type for USBWatcher")
@@ -72,7 +78,7 @@ func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 	go func() {
 		cusbmon, err := usbmon.Listen(ctx)
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatal(err)
 		}
 
 		for {
@@ -86,13 +92,13 @@ func (w *USBWatcher) Init(ctx context.Context, cfg any) error {
 						case "add":
 							if errs := cfg.CmdUp.Exec(); len(errs) > 0 {
 								for _, err := range errs {
-									log.Printf("ERROR: %s", err)
+									logger.Error("ERROR: %s", err)
 								}
 							}
 						case "remove":
 							if errs := cfg.CmdDown.Exec(); len(errs) > 0 {
 								for _, err := range errs {
-									log.Printf("ERROR: %s", err)
+									logger.Error("ERROR: %s", err)
 								}
 							}
 						}
